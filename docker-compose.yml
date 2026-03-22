@@ -1,0 +1,14 @@
+services:
+  web:
+    build: .
+    container_name: confectionery-showcase
+    ports:
+      - "8000:8000"
+    environment:
+      ADMIN_USERNAME: owner
+      ADMIN_PASSWORD: owner123
+      SESSION_SECRET: change-me-for-production
+      DATABASE_URL: sqlite:////app/data/shop.db
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
