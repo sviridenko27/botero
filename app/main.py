@@ -1,352 +1,379 @@
+from __future__ import annotations
+
 import os
+import secrets
+import shutil
+import uuid
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import RedirectResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from starlette.middleware.sessions import SessionMiddleware
 
-from .database import Base, SessionLocal, engine, get_db
-from .models import Filling, Product, StoreInfo
+from .db import get_db, init_db
+from .models import ContentItem, NewsItem, SectionType
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
+UPLOAD_DIR = BASE_DIR / "uploads"
+UPLOAD_DIR.mkdir(exist_ok=True)
 
-app = FastAPI(title="Кондитерская витрина")
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=os.getenv("SESSION_SECRET", "change-me-for-production"),
-)
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+SECTION_META = {
+    SectionType.aromas: {
+        "name": "Ароматы",
+        "description": "Коллекция нишевых и авторских парфюмов.",
+    },
+    SectionType.brands: {
+        "name": "Бренды",
+        "description": "Дома моды и независимые парфюмерные бренды.",
+    },
+    SectionType.care: {
+        "name": "Уход",
+        "description": "Продукты ухода за телом и ритуалы красоты.",
+    },
+}
+
+app = FastAPI(title="Perfume Boutique")
+security = HTTPBasic()
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
-SERIAL_CATEGORIES = {
-    "cakes": "Торты",
-    "pastries": "Пирожные",
-}
-
-CATALOG_CATEGORIES = {
-    "wedding": "Свадебные",
-    "birthday": "День рождения",
-    "kids": "Детские",
-}
-
-DEFAULT_PRODUCTS = [
-    {
-        "name": "Карамельный бархат",
-        "section": "serial",
-        "category": "cakes",
-        "description": "Нежный бисквит с соленой карамелью и кремом маскарпоне.",
-        "price": 3100,
-        "image_url": "https://images.unsplash.com/photo-1565958011703-44f9829ba187?auto=format&fit=crop&w=1200&q=80",
-    },
-    {
-        "name": "Ягодный мильфей",
-        "section": "serial",
-        "category": "pastries",
-        "description": "Слоеное пирожное с кремом дипломат и свежей малиной.",
-        "price": 360,
-        "image_url": "https://images.unsplash.com/photo-1486427944299-d1955d23e34d?auto=format&fit=crop&w=1200&q=80",
-    },
-    {
-        "name": "Свадебный белый шифон",
-        "section": "catalog",
-        "category": "wedding",
-        "description": "Трехъярусный торт с ванильным муссом и живыми цветами.",
-        "price": 14500,
-        "image_url": "https://images.unsplash.com/photo-1535254973040-607b474cb50d?auto=format&fit=crop&w=1200&q=80",
-    },
-    {
-        "name": "Шоколадный праздник",
-        "section": "catalog",
-        "category": "birthday",
-        "description": "Плотный шоколадный бисквит и сливочный ганаш с декором.",
-        "price": 6200,
-        "image_url": "https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=1200&q=80",
-    },
-    {
-        "name": "Радужный единорог",
-        "section": "catalog",
-        "category": "kids",
-        "description": "Яркий детский торт с натуральными красителями и маршмеллоу.",
-        "price": 5900,
-        "image_url": "https://images.unsplash.com/photo-1558301211-0d8c8ddee6ec?auto=format&fit=crop&w=1200&q=80",
-    },
-]
-
-DEFAULT_FILLINGS = [
-    {
-        "name": "Фисташка-малина",
-        "description": "Фисташковый крем, малиновое конфи и тонкий бисквит.",
-    },
-    {
-        "name": "Манго-маракуйя",
-        "description": "Тропическая кислинка, воздушный мусс и ванильный корж.",
-    },
-    {
-        "name": "Классический медовик",
-        "description": "Медовые коржи и сметанный крем в легкой современной версии.",
-    },
-]
-
-
-def ensure_store_info(db: Session) -> StoreInfo:
-    store_info = db.scalar(select(StoreInfo).where(StoreInfo.id == 1))
-    if store_info:
-        return store_info
-
-    store_info = StoreInfo(
-        id=1,
-        phone="+7 (900) 000-00-00",
-        address="г. Москва, ул. Кондитерская, 12",
-        delivery_text="Доставка по Москве и МО ежедневно с 10:00 до 22:00."
-        " Экспресс-доставка в день заказа обсуждается отдельно.",
-        payment_text="Оплата картой на сайте, переводом или наличными при самовывозе.",
-    )
-    db.add(store_info)
-    db.commit()
-    db.refresh(store_info)
-    return store_info
-
-
-def seed_demo_content(db: Session) -> None:
-    has_products = db.scalar(select(Product.id).limit(1))
-    if not has_products:
-        for item in DEFAULT_PRODUCTS:
-            db.add(Product(**item))
-
-    has_fillings = db.scalar(select(Filling.id).limit(1))
-    if not has_fillings:
-        for item in DEFAULT_FILLINGS:
-            db.add(Filling(**item))
-
-    ensure_store_info(db)
-    db.commit()
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+app.mount("/uploads", StaticFiles(directory=str(BASE_DIR / "uploads")), name="uploads")
 
 
 @app.on_event("startup")
 def on_startup() -> None:
-    Base.metadata.create_all(bind=engine)
-    with SessionLocal() as db:
-        seed_demo_content(db)
+    init_db()
 
 
-def admin_guard(request: Request) -> RedirectResponse | None:
-    if request.session.get("is_admin"):
+def require_admin(credentials: HTTPBasicCredentials = Depends(security)) -> None:
+    username_ok = secrets.compare_digest(credentials.username, ADMIN_USERNAME)
+    password_ok = secrets.compare_digest(credentials.password, ADMIN_PASSWORD)
+    if not (username_ok and password_ok):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+
+def parse_section(section: str) -> SectionType:
+    try:
+        return SectionType(section)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Section not found") from exc
+
+
+async def save_upload(file: UploadFile | None) -> str | None:
+    if not file or not file.filename:
         return None
-    return RedirectResponse(url="/admin/login", status_code=status.HTTP_302_FOUND)
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image uploads are allowed")
+
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
+        suffix = ".jpg"
+
+    filename = f"{uuid.uuid4().hex}{suffix}"
+    destination = UPLOAD_DIR / filename
+
+    contents = await file.read()
+    destination.write_bytes(contents)
+    return f"/uploads/{filename}"
+
+
+def remove_upload(path: str | None) -> None:
+    if not path:
+        return
+    filename = Path(path).name
+    candidate = UPLOAD_DIR / filename
+    if candidate.exists():
+        candidate.unlink()
+
+
+def duplicate_upload(path: str | None) -> str | None:
+    if not path:
+        return None
+    source = UPLOAD_DIR / Path(path).name
+    if not source.exists() or not source.is_file():
+        return None
+
+    suffix = source.suffix.lower() or ".jpg"
+    duplicate_name = f"{uuid.uuid4().hex}{suffix}"
+    destination = UPLOAD_DIR / duplicate_name
+    shutil.copy2(source, destination)
+    return f"/uploads/{duplicate_name}"
+
+
+def get_news_items(db: Session) -> list[NewsItem]:
+    return db.scalars(select(NewsItem).order_by(NewsItem.updated_at.desc(), NewsItem.id.desc())).all()
 
 
 @app.get("/")
-def storefront(request: Request, db: Session = Depends(get_db)):
-    products = db.scalars(select(Product).order_by(Product.created_at.desc())).all()
-    fillings = db.scalars(select(Filling).order_by(Filling.created_at.desc())).all()
-    store_info = ensure_store_info(db)
-
-    serial_products = [item for item in products if item.section == "serial"]
-    catalog_products = [item for item in products if item.section == "catalog"]
-
+def home(request: Request, db: Session = Depends(get_db)):
+    news_items = get_news_items(db)
+    aroma_items = db.scalars(
+        select(ContentItem)
+        .where(ContentItem.section == SectionType.aromas)
+        .order_by(ContentItem.updated_at.desc(), ContentItem.id.desc())
+    ).all()
+    brand_items = db.scalars(
+        select(ContentItem)
+        .where(ContentItem.section == SectionType.brands)
+        .order_by(ContentItem.updated_at.desc(), ContentItem.id.desc())
+    ).all()
+    care_items = db.scalars(
+        select(ContentItem)
+        .where(ContentItem.section == SectionType.care)
+        .order_by(ContentItem.updated_at.desc(), ContentItem.id.desc())
+    ).all()
     return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "serial_products": serial_products,
-            "catalog_products": catalog_products,
-            "fillings": fillings,
-            "store_info": store_info,
-            "serial_categories": SERIAL_CATEGORIES,
-            "catalog_categories": CATALOG_CATEGORIES,
+        request=request,
+        name="index.html",
+        context={
+            "sections": SECTION_META,
+            "news_items": news_items,
+            "aroma_items": aroma_items,
+            "brand_items": brand_items,
+            "care_items": care_items,
         },
     )
 
 
-@app.get("/api/products")
-def list_products(db: Session = Depends(get_db)):
-    items = db.scalars(select(Product).order_by(Product.created_at.desc())).all()
-    return [
-        {
-            "id": item.id,
-            "name": item.name,
-            "section": item.section,
-            "category": item.category,
-            "description": item.description,
-            "price": item.price,
-            "image_url": item.image_url,
-        }
-        for item in items
-    ]
-
-
-@app.get("/api/fillings")
-def list_fillings(db: Session = Depends(get_db)):
-    items = db.scalars(select(Filling).order_by(Filling.created_at.desc())).all()
-    return [{"id": item.id, "name": item.name, "description": item.description} for item in items]
-
-
-@app.get("/admin/login")
-def admin_login_page(request: Request):
-    if request.session.get("is_admin"):
-        return RedirectResponse(url="/admin", status_code=status.HTTP_302_FOUND)
+@app.get("/section/{section_slug}")
+def section_page(section_slug: str, request: Request, db: Session = Depends(get_db)):
+    section = parse_section(section_slug)
+    news_items = get_news_items(db)
+    items = db.scalars(
+        select(ContentItem)
+        .where(ContentItem.section == section)
+        .order_by(ContentItem.updated_at.desc(), ContentItem.id.desc())
+    ).all()
     return templates.TemplateResponse(
-        "admin_login.html",
-        {
-            "request": request,
-            "error": request.query_params.get("error"),
+        request=request,
+        name="section.html",
+        context={
+            "section": section,
+            "section_data": SECTION_META[section],
+            "items": items,
+            "sections": SECTION_META,
+            "news_items": news_items,
         },
     )
 
 
-@app.post("/admin/login")
-def admin_login(
-    request: Request,
-    username: str = Form(...),
-    password: str = Form(...),
-):
-    expected_username = os.getenv("ADMIN_USERNAME", "owner")
-    expected_password = os.getenv("ADMIN_PASSWORD", "owner123")
+@app.get("/item/{item_id}")
+def item_page(item_id: int, request: Request, db: Session = Depends(get_db)):
+    item = db.get(ContentItem, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
 
-    if username != expected_username or password != expected_password:
-        return RedirectResponse(
-            url="/admin/login?error=1",
-            status_code=status.HTTP_302_FOUND,
-        )
-
-    request.session["is_admin"] = True
-    return RedirectResponse(url="/admin", status_code=status.HTTP_302_FOUND)
-
-
-@app.post("/admin/logout")
-def admin_logout(request: Request):
-    request.session.clear()
-    return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    section_data = SECTION_META[item.section]
+    return templates.TemplateResponse(
+        request=request,
+        name="item_detail.html",
+        context={
+            "item": item,
+            "section_data": section_data,
+            "section_slug": item.section.value,
+            "sections": SECTION_META,
+        },
+    )
 
 
 @app.get("/admin")
-def admin_dashboard(request: Request, db: Session = Depends(get_db)):
-    guard = admin_guard(request)
-    if guard:
-        return guard
-    products = db.scalars(select(Product).order_by(Product.created_at.desc())).all()
-    fillings = db.scalars(select(Filling).order_by(Filling.created_at.desc())).all()
-    store_info = ensure_store_info(db)
-
+def admin_panel(
+    request: Request,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    items = db.scalars(select(ContentItem).order_by(ContentItem.id.desc())).all()
+    news_items = get_news_items(db)
     return templates.TemplateResponse(
-        "admin.html",
-        {
-            "request": request,
-            "products": products,
-            "fillings": fillings,
-            "store_info": store_info,
-            "serial_categories": SERIAL_CATEGORIES,
-            "catalog_categories": CATALOG_CATEGORIES,
-        },
+        request=request,
+        name="admin.html",
+        context={"items": items, "sections": SECTION_META, "news_items": news_items},
     )
 
 
-@app.post("/admin/products")
-def add_product(
-    request: Request,
-    name: str = Form(...),
+@app.post("/admin/items")
+async def create_item(
+    title: str = Form(...),
+    description: str = Form(...),
     section: str = Form(...),
-    category: str = Form(...),
-    description: str = Form(...),
-    price: float = Form(...),
-    image_url: str = Form(...),
+    image: UploadFile | None = File(default=None),
     db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
 ):
-    guard = admin_guard(request)
-    if guard:
-        return guard
+    section_type = parse_section(section)
+    image_path = await save_upload(image)
 
-    if section not in {"serial", "catalog"}:
-        raise HTTPException(status_code=400, detail="Некорректный раздел")
-
-    if section == "serial" and category not in SERIAL_CATEGORIES:
-        raise HTTPException(status_code=400, detail="Некорректная категория")
-
-    if section == "catalog" and category not in CATALOG_CATEGORIES:
-        raise HTTPException(status_code=400, detail="Некорректная категория")
-
-    db.add(
-        Product(
-            name=name,
-            section=section,
-            category=category,
-            description=description,
-            price=price,
-            image_url=image_url,
-        )
+    item = ContentItem(
+        title=title.strip(),
+        description=description.strip(),
+        section=section_type,
+        image_path=image_path,
     )
+    db.add(item)
     db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_302_FOUND)
+
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@app.post("/admin/products/{product_id}/delete")
-def delete_product(product_id: int, request: Request, db: Session = Depends(get_db)):
-    guard = admin_guard(request)
-    if guard:
-        return guard
-    item = db.scalar(select(Product).where(Product.id == product_id))
-    if item:
-        db.delete(item)
-        db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_302_FOUND)
-
-
-@app.post("/admin/fillings")
-def add_filling(
-    request: Request,
-    name: str = Form(...),
+@app.post("/admin/items/{item_id}/update")
+async def update_item(
+    item_id: int,
+    title: str = Form(...),
     description: str = Form(...),
+    section: str = Form(...),
+    image: UploadFile | None = File(default=None),
     db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
 ):
-    guard = admin_guard(request)
-    if guard:
-        return guard
+    item = db.get(ContentItem, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
 
-    exists = db.scalar(select(Filling).where(Filling.name == name))
-    if not exists:
-        db.add(Filling(name=name, description=description))
-        db.commit()
+    item.title = title.strip()
+    item.description = description.strip()
+    item.section = parse_section(section)
 
-    return RedirectResponse(url="/admin", status_code=status.HTTP_302_FOUND)
+    new_image = await save_upload(image)
+    if new_image:
+        remove_upload(item.image_path)
+        item.image_path = new_image
 
-
-@app.post("/admin/fillings/{filling_id}/delete")
-def delete_filling(filling_id: int, request: Request, db: Session = Depends(get_db)):
-    guard = admin_guard(request)
-    if guard:
-        return guard
-    item = db.scalar(select(Filling).where(Filling.id == filling_id))
-    if item:
-        db.delete(item)
-        db.commit()
-    return RedirectResponse(url="/admin", status_code=status.HTTP_302_FOUND)
-
-
-@app.post("/admin/store-info")
-def update_store_info(
-    request: Request,
-    phone: str = Form(...),
-    address: str = Form(...),
-    delivery_text: str = Form(...),
-    payment_text: str = Form(...),
-    db: Session = Depends(get_db),
-):
-    guard = admin_guard(request)
-    if guard:
-        return guard
-    store_info = ensure_store_info(db)
-
-    store_info.phone = phone
-    store_info.address = address
-    store_info.delivery_text = delivery_text
-    store_info.payment_text = payment_text
-
-    db.add(store_info)
+    db.add(item)
     db.commit()
 
-    return RedirectResponse(url="/admin", status_code=status.HTTP_302_FOUND)
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/admin/items/{item_id}/delete")
+def delete_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    item = db.get(ContentItem, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    remove_upload(item.image_path)
+    db.delete(item)
+    db.commit()
+
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/admin/items/{item_id}/duplicate")
+def duplicate_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    item = db.get(ContentItem, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    duplicated_item = ContentItem(
+        title=item.title,
+        description=item.description,
+        section=item.section,
+        image_path=duplicate_upload(item.image_path),
+    )
+    db.add(duplicated_item)
+    db.commit()
+
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/admin/news")
+async def create_news(
+    title: str = Form(...),
+    description: str = Form(...),
+    image: UploadFile | None = File(default=None),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    image_path = await save_upload(image)
+    news_item = NewsItem(
+        title=title.strip(),
+        description=description.strip(),
+        image_path=image_path,
+    )
+    db.add(news_item)
+    db.commit()
+
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/admin/news/{news_id}/update")
+async def update_news(
+    news_id: int,
+    title: str = Form(...),
+    description: str = Form(...),
+    image: UploadFile | None = File(default=None),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    news_item = db.get(NewsItem, news_id)
+    if not news_item:
+        raise HTTPException(status_code=404, detail="News item not found")
+
+    news_item.title = title.strip()
+    news_item.description = description.strip()
+
+    new_image = await save_upload(image)
+    if new_image:
+        remove_upload(news_item.image_path)
+        news_item.image_path = new_image
+
+    db.add(news_item)
+    db.commit()
+
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/admin/news/{news_id}/delete")
+def delete_news(
+    news_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    news_item = db.get(NewsItem, news_id)
+    if not news_item:
+        raise HTTPException(status_code=404, detail="News item not found")
+
+    remove_upload(news_item.image_path)
+    db.delete(news_item)
+    db.commit()
+
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/admin/news/{news_id}/duplicate")
+def duplicate_news(
+    news_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    news_item = db.get(NewsItem, news_id)
+    if not news_item:
+        raise HTTPException(status_code=404, detail="News item not found")
+
+    duplicated_news = NewsItem(
+        title=news_item.title,
+        description=news_item.description,
+        image_path=duplicate_upload(news_item.image_path),
+    )
+    db.add(duplicated_news)
+    db.commit()
+
+    return RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)

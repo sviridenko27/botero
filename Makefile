@@ -1,55 +1,22 @@
-SHELL := /bin/zsh
-.DEFAULT_GOAL := help
+.PHONY: install run dev docker-build docker-up docker-down docker-logs
 
-PYTHON := python3
-VENV := .venv
-PIP := $(VENV)/bin/pip
-UVICORN := $(VENV)/bin/uvicorn
-COMPOSE := docker compose
-APP := app.main:app
-HOST := 127.0.0.1
-PORT := 8000
+install:
+	python3 -m pip install -r requirements.txt
 
-.PHONY: help venv install run build up down restart logs ps clean
+run:
+	uvicorn app.main:app --host 0.0.0.0 --port 8000
 
-help:
-	@echo "Доступные команды:"
-	@echo "  make venv      - создать виртуальное окружение"
-	@echo "  make install   - установить зависимости в .venv"
-	@echo "  make run       - локальный запуск FastAPI (uvicorn --reload)"
-	@echo "  make build     - собрать Docker-образ"
-	@echo "  make up        - запустить проект в Docker Compose"
-	@echo "  make down      - остановить Docker Compose"
-	@echo "  make restart   - перезапустить Docker Compose"
-	@echo "  make logs      - логи Docker Compose"
-	@echo "  make ps        - статус контейнеров"
-	@echo "  make clean     - удалить локальные временные файлы"
+dev:
+	uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
-venv:
-	$(PYTHON) -m venv $(VENV)
+docker-build:
+	docker compose build
 
-install: venv
-	$(PIP) install -r requirements.txt
+docker-up:
+	docker compose up -d
 
-run: install
-	$(UVICORN) $(APP) --host $(HOST) --port $(PORT) --reload
+docker-down:
+	docker compose down
 
-build:
-	$(COMPOSE) build
-
-up:
-	$(COMPOSE) up --build
-
-down:
-	$(COMPOSE) down
-
-restart: down up
-
-logs:
-	$(COMPOSE) logs -f
-
-ps:
-	$(COMPOSE) ps
-
-clean:
-	rm -rf __pycache__ app/__pycache__
+docker-logs:
+	docker compose logs -f web

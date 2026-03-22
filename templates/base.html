@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Парфюмерный бутик{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&family=Playfair+Display:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/css/styles.css" />
+  </head>
+  <body class="{% if request.url.path == '/' %}home-page{% endif %}">
+    <header class="site-header">
+      <span class="header-trident header-trident-left" aria-hidden="true">♆</span>
+      <nav class="main-nav">
+        <a href="/">Главная</a>
+        <a href="/section/aromas">Ароматы</a>
+        <a href="/section/brands">Бренды</a>
+        <a href="/section/care">Уход</a>
+      </nav>
+      <span class="header-trident header-trident-right" aria-hidden="true">♆</span>
+    </header>
+
+    {% if request.url.path == "/" %}
+    <section class="top-showcase">
+      <div class="top-showcase-inner">
+        <div class="top-showcase-logo" aria-label="Botero">
+          <div class="logo-stack">
+            <span class="logo-main">BOTERO</span>
+          </div>
+        </div>
+        <div class="top-showcase-news">
+          {% if news_items %}
+          <div class="news-slider" data-slider>
+            <div class="news-slides">
+              {% for news in news_items %}
+              <article
+                class="news-slide {% if news.image_path %}has-image{% else %}no-image{% endif %} {% if loop.first %}is-active{% endif %}"
+                data-slide
+                {% if news.image_path %}
+                style="--news-bg: url('{{ news.image_path }}');"
+                {% endif %}
+              >
+                <div class="news-slide-body">
+                  <h2>{{ news.title }}</h2>
+                  <p>{{ news.description }}</p>
+                </div>
+              </article>
+              {% endfor %}
+            </div>
+            {% if news_items|length > 1 %}
+            <div class="news-controls">
+              <button type="button" data-slider-prev aria-label="Предыдущая новость">&#10094;</button>
+              <button type="button" data-slider-next aria-label="Следующая новость">&#10095;</button>
+            </div>
+            {% endif %}
+          </div>
+          {% else %}
+          <div class="news-empty">
+            <h2>Новости</h2>
+            <p>Добавьте первую новость через админ-панель, чтобы она появилась в слайдере.</p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+    <div class="scroll-next-wrap">
+      <button
+        type="button"
+        class="scroll-next-btn"
+        data-scroll-target="#products-start"
+        aria-label="Перейти к слайдерам товаров"
+      >
+        &#8595;
+      </button>
+    </div>
+
+    {% set product_sections = [
+      ("Позиции ароматов", "/section/aromas", aroma_items, "Пока нет карточек ароматов"),
+      ("Позиции брендов", "/section/brands", brand_items, "Пока нет карточек брендов"),
+      ("Позиции ухода", "/section/care", care_items, "Пока нет карточек ухода")
+    ] %}
+
+    {% for title, link, items, empty_title in product_sections %}
+    <section class="product-showcase" {% if loop.first %}id="products-start"{% endif %}>
+      <div class="product-showcase-head">
+        <h2>{{ title }}</h2>
+        <a href="{{ link }}">Смотреть все</a>
+      </div>
+
+      {% if items %}
+      <div class="product-slider" data-slider data-slider-interval="0">
+        <div class="product-pages">
+          {% for page in items|batch(4, none) %}
+          <div class="product-page {% if loop.first %}is-active{% endif %}" data-slide>
+            {% for item in page %}
+            {% if item %}
+            <a class="product-card" href="/item/{{ item.id }}">
+              {% if item.image_path %}
+              <img src="{{ item.image_path }}" alt="{{ item.title }}" loading="lazy" />
+              {% endif %}
+              <div class="product-card-body">
+                <h3>{{ item.title }}</h3>
+                <p>{{ item.description }}</p>
+              </div>
+            </a>
+            {% endif %}
+            {% endfor %}
+          </div>
+          {% endfor %}
+        </div>
+
+        {% if items|length > 4 %}
+        <div class="product-controls">
+          <button type="button" data-slider-prev aria-label="Предыдущие карточки">&#10094;</button>
+          <button type="button" data-slider-next aria-label="Следующие карточки">&#10095;</button>
+        </div>
+        {% endif %}
+      </div>
+      {% else %}
+      <div class="product-empty">
+        <h3>{{ empty_title }}</h3>
+        <p>Добавьте позиции в соответствующем разделе через админ-панель.</p>
+      </div>
+      {% endif %}
+    </section>
+    {% endfor %}
+    {% endif %}
+
+    <main class="page-wrap">{% block content %}{% endblock %}</main>
+    <script src="/static/js/main.js" defer></script>
+  </body>
+</html>

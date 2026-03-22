@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}{{ section_data.name }} | Парфюмерный бутик{% endblock %}
+
+{% block content %}
+<section class="page-head">
+  <h1>{{ section_data.name }}</h1>
+  <p>{{ section_data.description }}</p>
+</section>
+
+{% if items %}
+<div class="cards">
+  {% for item in items %}
+  <a class="card card-link" href="/item/{{ item.id }}">
+    {% if item.image_path %}
+    <img src="{{ item.image_path }}" alt="{{ item.title }}" loading="lazy" />
+    {% endif %}
+    <div class="card-body">
+      <h2>{{ item.title }}</h2>
+      <p>{{ item.description }}</p>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<section class="empty-state">
+  <h2>Пока здесь нет наполнения</h2>
+  <p>Добавьте первые карточки через панель администратора.</p>
+</section>
+{% endif %}
+{% endblock %}

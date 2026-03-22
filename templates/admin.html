@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}Админ-панель | Парфюмерный бутик{% endblock %}
+
+{% block content %}
+<section class="page-head">
+  <h1>Панель администратора</h1>
+  <p>Управляйте контентом разделов: создавайте, редактируйте и удаляйте карточки.</p>
+</section>
+
+<section class="admin-grid">
+  <article class="admin-box">
+    <h2>Добавить карточку</h2>
+    <form action="/admin/items" method="post" enctype="multipart/form-data" class="form-grid">
+      <label>
+        Заголовок
+        <input type="text" name="title" required />
+      </label>
+      <label>
+        Раздел
+        <select name="section" required>
+          <option value="aromas">Ароматы</option>
+          <option value="brands">Бренды</option>
+          <option value="care">Уход</option>
+        </select>
+      </label>
+      <label class="full">
+        Описание
+        <textarea name="description" rows="4" required></textarea>
+      </label>
+      <label class="full">
+        Изображение
+        <input type="file" name="image" accept="image/*" />
+      </label>
+      <button type="submit">Создать</button>
+    </form>
+  </article>
+
+  <article class="admin-box">
+    <h2>Существующие карточки</h2>
+    {% if items %}
+    <div class="admin-items">
+      {% for item in items %}
+      <form
+        action="/admin/items/{{ item.id }}/update"
+        method="post"
+        enctype="multipart/form-data"
+        class="item-editor"
+      >
+        <h3>#{{ item.id }} {{ item.title }}</h3>
+        <label>
+          Заголовок
+          <input type="text" name="title" value="{{ item.title }}" required />
+        </label>
+        <label>
+          Раздел
+          <select name="section" required>
+            <option value="aromas" {% if item.section.value == "aromas" %}selected{% endif %}>Ароматы</option>
+            <option value="brands" {% if item.section.value == "brands" %}selected{% endif %}>Бренды</option>
+            <option value="care" {% if item.section.value == "care" %}selected{% endif %}>Уход</option>
+          </select>
+        </label>
+        <label class="full">
+          Описание
+          <textarea name="description" rows="4" required>{{ item.description }}</textarea>
+        </label>
+        <label class="full">
+          Новое изображение
+          <input type="file" name="image" accept="image/*" />
+        </label>
+
+        {% if item.image_path %}
+        <img src="{{ item.image_path }}" alt="{{ item.title }}" class="admin-thumb" />
+        {% endif %}
+
+        <div class="actions">
+          <button type="submit">Сохранить</button>
+          <button
+            type="submit"
+            formaction="/admin/items/{{ item.id }}/duplicate"
+            formmethod="post"
+            class="secondary"
+          >
+            Дублировать
+          </button>
+          <button
+            type="submit"
+            formaction="/admin/items/{{ item.id }}/delete"
+            formmethod="post"
+            class="danger"
+            onclick="return confirm('Удалить карточку?');"
+          >
+            Удалить
+          </button>
+        </div>
+      </form>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p>Пока нет карточек. Создайте первую в форме слева.</p>
+    {% endif %}
+  </article>
+</section>
+
+<section class="admin-grid admin-news">
+  <article class="admin-box">
+    <h2>Добавить новость в слайдер</h2>
+    <form action="/admin/news" method="post" enctype="multipart/form-data" class="form-grid">
+      <label>
+        Заголовок
+        <input type="text" name="title" required />
+      </label>
+      <label class="full">
+        Текст новости
+        <textarea name="description" rows="4" required></textarea>
+      </label>
+      <label class="full">
+        Изображение новости
+        <input type="file" name="image" accept="image/*" />
+      </label>
+      <button type="submit">Добавить новость</button>
+    </form>
+  </article>
+
+  <article class="admin-box">
+    <h2>Существующие новости</h2>
+    {% if news_items %}
+    <div class="admin-items">
+      {% for news in news_items %}
+      <form
+        action="/admin/news/{{ news.id }}/update"
+        method="post"
+        enctype="multipart/form-data"
+        class="item-editor"
+      >
+        <h3>#{{ news.id }} {{ news.title }}</h3>
+        <label class="full">
+          Заголовок
+          <input type="text" name="title" value="{{ news.title }}" required />
+        </label>
+        <label class="full">
+          Текст новости
+          <textarea name="description" rows="4" required>{{ news.description }}</textarea>
+        </label>
+        <label class="full">
+          Новое изображение
+          <input type="file" name="image" accept="image/*" />
+        </label>
+
+        {% if news.image_path %}
+        <img src="{{ news.image_path }}" alt="{{ news.title }}" class="admin-thumb" />
+        {% endif %}
+
+        <div class="actions">
+          <button type="submit">Сохранить</button>
+          <button
+            type="submit"
+            formaction="/admin/news/{{ news.id }}/duplicate"
+            formmethod="post"
+            class="secondary"
+          >
+            Дублировать
+          </button>
+          <button
+            type="submit"
+            formaction="/admin/news/{{ news.id }}/delete"
+            formmethod="post"
+            class="danger"
+            onclick="return confirm('Удалить новость?');"
+          >
+            Удалить
+          </button>
+        </div>
+      </form>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p>Новостей пока нет. Добавьте первую новость для слайдера.</p>
+    {% endif %}
+  </article>
+</section>
+{% endblock %}

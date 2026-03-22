@@ -1,44 +1,59 @@
+from __future__ import annotations
+
+import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, Integer, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
-
-from .database import Base
+from sqlalchemy import DateTime, Enum, Integer, String, Text, func
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
-class Product(Base):
-    __tablename__ = "products"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    name: Mapped[str] = mapped_column(String(120), nullable=False)
-    section: Mapped[str] = mapped_column(String(40), index=True, nullable=False)
-    category: Mapped[str] = mapped_column(String(40), index=True, nullable=False)
-    description: Mapped[str] = mapped_column(Text, nullable=False)
-    price: Mapped[float] = mapped_column(Float, nullable=False)
-    image_url: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+class Base(DeclarativeBase):
+    pass
 
 
-class Filling(Base):
-    __tablename__ = "fillings"
+class SectionType(str, enum.Enum):
+    aromas = "aromas"
+    brands = "brands"
+    care = "care"
+
+
+class ContentItem(Base):
+    __tablename__ = "content_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(150), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
-
-
-class StoreInfo(Base):
-    __tablename__ = "store_info"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    phone: Mapped[str] = mapped_column(String(30), nullable=False)
-    address: Mapped[str] = mapped_column(String(255), nullable=False)
-    delivery_text: Mapped[str] = mapped_column(Text, nullable=False)
-    payment_text: Mapped[str] = mapped_column(Text, nullable=False)
+    section: Mapped[SectionType] = mapped_column(Enum(SectionType), nullable=False, index=True)
+    image_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        server_default=func.now(),
-        onupdate=func.now(),
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class NewsItem(Base):
+    __tablename__ = "news_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    title: Mapped[str] = mapped_column(String(150), nullable=False)
+    description: Mapped[str] = mapped_column(
+        Text,
         nullable=False,
+    )
+
+    image_path: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

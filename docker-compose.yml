@@ -1,14 +1,15 @@
+version: "3.9"
+
 services:
   web:
     build: .
-    container_name: confectionery-showcase
+    container_name: perfume_boutique_web
     ports:
       - "8000:8000"
     environment:
-      ADMIN_USERNAME: owner
-      ADMIN_PASSWORD: owner123
-      SESSION_SECRET: change-me-for-production
-      DATABASE_URL: sqlite:////app/data/shop.db
+      - DATABASE_URL=sqlite:///./data/boutique.db
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=admin123
     volumes:
+      - ./uploads:/app/uploads
       - ./data:/app/data
-    restart: unless-stopped
